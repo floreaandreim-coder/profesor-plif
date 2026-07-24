@@ -15,32 +15,14 @@ st.caption("Platformă interactivă de pregătire profesională în Irigații, D
 
 # --- 1. PRELUARE SECURIZATĂ A CHEII API ---
 if "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets["GEMINI_API_KEY"]
+    api_key = st.secrets["GEMINI_API_KEY"].strip()
 else:
     st.error("Cheia GEMINI_API_KEY nu este configurată în Streamlit Secrets!")
     st.stop()
 
 client = genai.Client(api_key=api_key)
 
-# --- 2. DETECTARE DINAMICĂ MODEL GEMINI ---
-@st.cache_resource
-def get_working_model():
-    try:
-        # Întrebăm direct API-ul Google ce modele sunt active pe cheia ta
-        models = list(client.models.list())
-        for m in models:
-            name = m.name
-            if "flash" in name.lower():
-                return name
-        if models:
-            return models[0].name
-    except Exception:
-        pass
-    return "gemini-2.0-flash"
-
-MODEL_NAME = get_working_model()
-
-# --- 3. ÎNCĂRCAREA BAZEI DE CUNOȘTINȚE ---
+# --- 2. ÎNCĂRCAREA BAZEI DE CUNOȘTINȚE ---
 @st.cache_data
 def load_knowledge_base():
     full_context = ""
@@ -58,7 +40,7 @@ def load_knowledge_base():
 
 KB_CONTEXT = load_knowledge_base()
 
-# --- 4. GESTIONAREA ISTORICULUI DE CHAT ---
+# --- 3. GESTIONAREA ISTORICULUI DE CHAT ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -90,17 +72,30 @@ Misiunea ta pedagogică:
 
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
-        try:
-            response = client.models.generate_content(
-                model=MODEL_NAME,
-                contents=formatted_history,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=0.2
+        
+        # Lista modelelor oficiale valide în SDK-ul nou
+        candidates = ['gemini-2.0-flash', 'gemini-1.5-flash']
+        success = False
+        last_err = ""
+
+        for model_id in candidates:
+            try:
+                response = client.models.generate_content(
+                    model=model_id,
+                    contents=formatted_history,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        temperature=0.2
+                    )
                 )
-            )
-            full_response = response.text
-            message_placeholder.markdown(full_response)
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-        except Exception as e:
-            st.error(f"Eroare la conectare: {str(e)}")
+                full_response = response.text
+                message_placeholder.markdown(full_response)
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                success = True
+                break
+            except Exception as e:
+                last_err = str(e)
+                continue
+
+        if not success:
+            st.error(f"Eroare la conectare: {last_err}")
