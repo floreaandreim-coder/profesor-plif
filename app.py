@@ -21,7 +21,6 @@ else:
     st.stop()
 
 client = genai.Client(api_key=api_key)
-MODEL_NAME = 'gemini-1.5-flash'
 
 # --- 2. ÎNCĂRCAREA BAZEI DE CUNOȘTINȚE ---
 @st.cache_data
@@ -73,17 +72,30 @@ Misiunea ta pedagogică:
 
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
-        try:
-            response = client.models.generate_content(
-                model=MODEL_NAME,
-                contents=formatted_history,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=0.2
+        
+        # Lista modelelor posibile
+        candidate_models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash']
+        success = False
+        last_error = ""
+
+        for model_name in candidate_models:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=formatted_history,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        temperature=0.2
+                    )
                 )
-            )
-            full_response = response.text
-            message_placeholder.markdown(full_response)
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-        except Exception as e:
-            st.error(f"Eroare la conectare: {str(e)}")
+                full_response = response.text
+                message_placeholder.markdown(full_response)
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                success = True
+                break
+            except Exception as e:
+                last_error = str(e)
+                continue
+
+        if not success:
+            st.error(f"Eroare la conectare: {last_error}")
